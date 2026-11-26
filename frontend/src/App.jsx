@@ -1,0 +1,612 @@
+import { useEffect, useMemo, useState } from 'react';
+import { BrowserRouter, Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
+import { Activity, ArrowRight, Search, MapPin, ShieldCheck, ShoppingCart, Package, Store, UserRound, LogOut, Plus, Minus, Trash2, LayoutDashboard, ClipboardList, Pill, Menu, X, CheckCircle2, Clock3, AlertCircle, HeartPulse, Stethoscope } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import api from './services/api';
+import './styles.css';
+import PharmacyMap from './PharmacyMap.jsx';
+const money=n=>`₹${Number(n||0).toFixed(2)}`;
+function App(){
+ const [user,setUser]=useState(()=>{try{return JSON.parse(localStorage.getItem('pf_user'))}catch{return null}});
+ const [cart,setCart]=useState(()=>{try{return JSON.parse(localStorage.getItem('pf_cart'))||[]}catch{return []}});
+ const [toast,setToast]=useState('');
+ useEffect(()=>{localStorage.setItem('pf_cart',JSON.stringify(cart))},[cart]);
+ const notify=m=>{setToast(m);setTimeout(()=>setToast(''),2800)};
+ const logout=()=>{localStorage.removeItem('pf_token');localStorage.removeItem('pf_user');setUser(null);setCart([]);notify('You have been logged out')};
+const addToCart = item => {
+  if (item.prescription) {
+    notify('Prescription medicines require a valid prescription. Please consult a pharmacist.');
+    return;
+  }
+
+  setCart(prev => {
+    const found = prev.find(x => x.inventoryId === item.id);
+
+    if (found) {
+      return prev.map(x =>
+        x.inventoryId === item.id
+          ? { ...x, quantity: x.quantity + 1 }
+          : x
+      );
+    }
+
+    return [
+      ...prev,
+      {
+        inventoryId: item.id,
+        name: item.name,
+        price: item.price,
+        quantity: 1,
+        pharmacy: item.pharmacy?.name || 'Pharmacy',
+        pharmacyId: item.pharmacy?.id || null,
+        pharmacyAddress: item.pharmacy?.address || '',
+        pharmacyPhone: item.pharmacy?.phone || ''
+      }
+    ];
+  });
+
+  notify('Added to your cart');
+};
+ const updateQty=(id,delta)=>setCart(prev=>prev.map(x=>x.inventoryId===id?{...x,quantity:Math.max(1,x.quantity+delta)}:x));
+ const removeCart=id=>setCart(prev=>prev.filter(x=>x.inventoryId!==id));
+ return <BrowserRouter><Shell user={user} cart={cart} logout={logout}><Routes>
+  <Route path="/" element={<Home addToCart={addToCart} user={user}/>}/><Route path="/medicines" element={<Medicines addToCart={addToCart}/>}/><Route path="/pharmacies" element={<Pharmacies/>}/><Route path="/pharmacies/:id" element={<PharmacyDetail addToCart={addToCart}/>}/>
+
+<Route path="/login" element={<Auth mode="login" setUser={setUser} notify={notify}/>} />
+ <Route path="/cart" element={<Cart cart={cart} updateQty={updateQty} removeCart={removeCart} user={user} setCart={setCart} notify={notify}/>}/>
+ <Route path="/owner" element={<OwnerDashboard user={user} notify={notify}/>}/>
+<Route path="/admin" element={<AdminDashboard user={user} notify={notify}/>}/>
+<Route path="/orders" element={<Orders user={user}/>}/>
+</Routes></Shell>{toast&&<div className="toast"><CheckCircle2 size={17}/>{toast}</div>}</BrowserRouter>
+}
+function Shell({user,cart,logout,children}){const [open,setOpen]=useState(false);const loc=useLocation();useEffect(()=>setOpen(false),[loc.pathname]);return <><header className="topbar"><div className="nav wrap"><Link to="/" className="brand"><span className="brand-icon"><HeartPulse size={22}/></span><span>pharma<span className="brand-accent">find</span><small>CARE, CLOSER TO YOU</small></span></Link><nav className={open?'nav-links open':'nav-links'}><Link to="/medicines">Medicines</Link><Link to="/pharmacies">Pharmacies</Link>{user?.role==='owner'&&<Link to="/owner">Owner portal</Link>}{user?.role==='customer'&&<Link to="/orders">My orders</Link>}<Link to="/cart" className="cart-link"><ShoppingCart size={17}/> Cart <b>{cart.reduce((a,x)=>a+x.quantity,0)}</b></Link>{user?<><span className="nav-user">Hi, {user.name.split(' ')[0]}</span><button className="btn btn-outline btn-small" onClick={logout}><LogOut size={15}/> Logout</button></>:<><Link to="/login">Log in</Link><Link className="btn btn-primary btn-small" to="/register">Create account <ArrowRight size={15}/></Link></>}</nav><button className="mobile-menu" onClick={()=>setOpen(!open)}>{open?<X/>:<Menu/>}</button></div></header><main>{children}</main><footer><div className="wrap footer-grid"><div><Link to="/" className="brand footer-brand"><span className="brand-icon"><HeartPulse/></span><span>pharma<span className="brand-accent">find</span><small>CARE, CLOSER TO YOU</small></span></Link><p>Discover local pharmacies and explore medicine availability near you.</p></div><div><b>Explore</b><Link to="/medicines">Find medicines</Link><Link to="/pharmacies">Pharmacies</Link></div><div><b>Account</b><Link to="/register">Create account</Link><Link to="/login">Sign in</Link><Link to="/owner">Pharmacy portal</Link></div><div><b>Important</b><p className="fine">PharmaFind is a discovery and ordering demo. It does not provide medical advice. Prescription medicines must only be dispensed against a valid prescription.</p></div></div><div className="copyright">© {new Date().getFullYear()} PharmaFind. Built for easier local medicine discovery.</div></footer></>}
+function Home({addToCart,user}){const [q,setQ]=useState('');const [items,setItems]=useState([]);useEffect(()=>{api.get('/medicines?inStock=true').then(r=>setItems(r.data.items.slice(0,8))).catch(()=>{})},[]);return <><section className="hero"><div className="wrap hero-grid"><div className="hero-copy"><div className="eyebrow"><span className="pulse-dot"/> YOUR NEIGHBOURHOOD HEALTHCARE NETWORK</div><h1>Find the right medicine.<br/><em>Find it closer.</em></h1><p>Search local pharmacy inventory, compare prices and discover healthcare essentials from stores around you.</p><form className="hero-search" onSubmit={e=>{e.preventDefault();location.href=`/medicines?q=${encodeURIComponent(q)}`}}><Search/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search medicine, brand or generic name"/><button className="btn btn-primary">Search <ArrowRight size={17}/></button></form><div className="hero-points"><span><ShieldCheck/> Local pharmacy listings</span><span><MapPin/> Nearby availability</span><span><Activity/> Simple order tracking</span></div></div><div className="hero-art"><div className="art-orbit orbit-one"/><div className="art-orbit orbit-two"/><div className="medical-card"><div className="card-top"><span className="tiny-logo"><HeartPulse/></span><span className="live-tag">LIVE INVENTORY</span></div><div className="big-cross">+</div><div className="art-caption"><b>Your health, within reach.</b><span>Explore local medicine availability</span></div><div className="art-pills"><span>Care</span><span>Connect</span><span>Discover</span></div></div><div className="float-card float-a"><span className="float-icon"><Store/></span><span><b>Local pharmacies</b><small>All in one place</small></span></div><div className="float-card float-b"><span className="float-icon green"><CheckCircle2/></span><span><b>Stock visibility</b><small>Check before you visit</small></span></div></div></div></section><section className="trust-strip"><div className="wrap trust-items"><span><ShieldCheck/> Pharmacy-led listings</span><span><Search/> Search by brand or generic</span><span><Package/> Inventory updates by owners</span><span><HeartPulse/> Healthcare discovery made simple</span></div></section><section className="section wrap"><div className="section-heading"><div><div className="eyebrow">EXPLORE THE CATALOGUE</div><h2>Popular medicines & essentials</h2><p>Browse sample listings from participating demo pharmacies.</p></div><Link to="/medicines" className="text-link">View all medicines <ArrowRight size={16}/></Link></div><div className="product-grid">{items.map((x,i)=><MedicineCard key={x.id} item={x} addToCart={addToCart} index={i}/>)}</div>{!items.length&&<Empty text="Medicine listings are loading or the API is offline."/>}</section><section className="owner-banner wrap"><div><div className="eyebrow">FOR PHARMACY OWNERS</div><h2>Bring your pharmacy online.</h2><p>Manage your medicine catalogue, update stock and receive customer orders from one simple dashboard.</p><Link to="/register?role=owner" className="btn btn-light">Register your pharmacy <ArrowRight size={16}/></Link></div><div className="owner-graphic"><Store size={100}/><div className="graphic-pill">INVENTORY <b>LIVE</b></div></div></section><section className="section wrap how"><div className="eyebrow">HOW PHARMAFIND WORKS</div><h2>Healthcare discovery, made simpler.</h2><div className="steps"><div><span>01</span><Search/><h3>Search</h3><p>Look up medicines by name, brand or category.</p></div><div><span>02</span><MapPin/><h3>Discover</h3><p>Compare participating pharmacy listings and stock.</p></div><div><span>03</span><ShoppingCart/><h3>Connect</h3><p>Place a demo order and follow its status.</p></div></div></section></>}
+function MedicineCard({item,addToCart,index=0}){return <motion.article className="medicine-card" initial={{opacity:0,y:15}} animate={{opacity:1,y:0}} transition={{delay:Math.min(index*.035,.25)}}><div className="medicine-visual"><div className="pill-illustration"><Pill size={35}/></div><span className={item.prescription?'rx-tag':'otc-tag'}>{item.prescription?'Rx required':'OTC'}</span></div><div className="medicine-info"><div className="category-label">{item.category}</div><h3>{item.name}</h3><p>{item.genericName||item.brand}</p><div className="medicine-meta"><span><Store size={14}/> {item.pharmacy?.name||'Your pharmacy'}</span><span className={item.stock>0?'stock':'out-stock'}>{item.stock>0?`${item.stock} in stock`:'Out of stock'}</span></div><div className="medicine-bottom"><b>{money(item.price)}</b><button className="icon-button" disabled={item.stock<1||item.prescription} onClick={()=>addToCart(item)} title={item.prescription?'Prescription required':'Add to cart'}><Plus size={18}/></button></div></div></motion.article>}
+function Medicines({addToCart}){const [q,setQ]=useState(new URLSearchParams(location.search).get('q')||'');const [category,setCategory]=useState('');const [city,setCity]=useState('');const [data,setData]=useState({items:[],categories:[]});const [loading,setLoading]=useState(true);useEffect(()=>{setLoading(true);api.get('/medicines',{params:{q,category,city,inStock:true}}).then(r=>setData(r.data)).catch(()=>setData({items:[],categories:[]})).finally(()=>setLoading(false))},[q,category,city]);return <div className="page wrap"><div className="page-heading"><div className="eyebrow">MEDICINE DIRECTORY</div><h1>Find your medicine</h1><p>Search available listings across participating pharmacies.</p></div><div className="filter-bar"><div className="search-field"><Search/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Medicine, brand or generic name"/></div><select value={category} onChange={e=>setCategory(e.target.value)}><option value="">All categories</option>{data.categories.map(c=><option key={c}>{c}</option>)}</select><div className="search-field city-field"><MapPin/><input value={city} onChange={e=>setCity(e.target.value)} placeholder="City or area"/></div></div><div className="result-count">{loading?'Searching…':`${data.items.length} matching listings`}</div><div className="product-grid">{data.items.map((x,i)=><MedicineCard key={x.id} item={x} addToCart={addToCart} index={i}/>)}</div>{!loading&&!data.items.length&&<Empty text="No medicines found. Try another name or category."/>}<div className="notice"><AlertCircle size={18}/><span>Medicine information is for discovery only. Always check the package label and consult a qualified pharmacist or doctor. Prescription medicines are not available for direct checkout in this demo.</span></div></div>}
+
+function Pharmacies() {
+  const [q, setQ] = useState('');
+  const [items, setItems] = useState([]);
+
+  useEffect(() => {
+    api.get('/pharmacies', { params: { q } })
+      .then(r => setItems(r.data.items || []))
+      .catch(() => setItems([]));
+  }, [q]);
+
+  return (
+    <div className="page wrap">
+      <div className="page-heading">
+        <div className="eyebrow">LOCAL PHARMACY NETWORK</div>
+        <h1>Discover pharmacies</h1>
+        <p>Explore pharmacy profiles and their listed medicine inventory.</p>
+      </div>
+
+      <div className="filter-bar">
+        <div className="search-field">
+          <Search />
+          <input
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            placeholder="Search pharmacy or area"
+          />
+        </div>
+      </div>
+
+      <PharmacyMap pharmacies={items} />
+
+      <div className="pharmacy-grid">
+        {items.map(p => (
+          <article className="pharmacy-card" key={p.id}>
+            <div className="pharmacy-icon">
+              <Store size={30} />
+            </div>
+            <div className="verified">
+              {p.verified ? 'Listed pharmacy' : 'New listing'}
+            </div>
+            <h3>{p.name}</h3>
+            <p><MapPin size={15} /> {p.address}</p>
+            <p>{p.description}</p>
+
+            <div className="pharmacy-card-bottom">
+              <span>
+                <Package size={15} /> {p.medicineCount} listed products
+              </span>
+              <Link to={`/pharmacies/${p.id}`} className="text-link">
+                View store <ArrowRight size={15} />
+              </Link>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      {!items.length && (
+        <Empty text="No pharmacies match this search." />
+      )}
+    </div>
+  );
+}
+function PharmacyDetail({addToCart}){const {id}=useLocation();const pharmacyId=location.pathname.split('/').pop();const [p,setP]=useState(null);useEffect(()=>{api.get(`/pharmacies/${pharmacyId}`).then(r=>setP(r.data)).catch(()=>setP(false))},[pharmacyId]);if(p===false)return <div className="page wrap"><Empty text="Pharmacy not found."/></div>;if(!p)return <div className="page wrap">Loading pharmacy…</div>;return <div className="page wrap"><Link to="/pharmacies" className="text-link">← All pharmacies</Link><div className="store-header"><div className="pharmacy-icon large"><Store size={38}/></div><div><div className="eyebrow">PHARMACY PROFILE</div><h1>{p.name}</h1><p><MapPin size={15}/> {p.address} {p.phone&&` · ${p.phone}`}</p></div></div><h2>Available inventory</h2><div className="product-grid">{p.inventory.map(x=><MedicineCard key={x.id} item={{...x,pharmacy:p}} addToCart={addToCart}/>)}</div></div>}
+function Auth({mode,setUser,notify}){const nav=useNavigate();const [role,setRole]=useState(new URLSearchParams(location.search).get('role')==='owner'?'owner':'customer');const [form,setForm]=useState({name:'',email:'',password:'',pharmacyName:'',address:'',phone:''});const [busy,setBusy]=useState(false);const change=e=>setForm({...form,[e.target.name]:e.target.value});const submit=async e=>{e.preventDefault();setBusy(true);try{const {data}=await api.post(`/auth/${mode}`,mode==='login'?{email:form.email,password:form.password}:{...form,role});localStorage.setItem('pf_token',data.token);localStorage.setItem('pf_user',JSON.stringify(data.user));setUser(data.user);notify(mode==='login'?'Welcome back!':'Your account has been created');nav(data.user.role==='admin'?'/admin':data.user.role==='owner'?'/owner':'/dashboard')}catch(err){notify(err.response?.data?.message||'Unable to connect to the server')}finally{setBusy(false)}};return <div className="auth-page"><div className="auth-card"><div className="auth-brand"><span className="brand-icon"><HeartPulse/></span><span>pharma<span className="brand-accent">find</span></span></div><div className="eyebrow">{mode==='login'?'WELCOME BACK':'JOIN THE NETWORK'}</div><h1>{mode==='login'?'Sign in to PharmaFind':'Create your account'}</h1><p>{mode==='login'?'Access your customer or pharmacy dashboard.':'Choose how you want to use PharmaFind.'}</p>{mode==='register'&&<div className="role-toggle"><button className={role==='customer'?'selected':''} onClick={()=>setRole('customer')} type="button"><UserRound/> Customer</button><button className={role==='owner'?'selected':''} onClick={()=>setRole('owner')} type="button"><Store/> Pharmacy owner</button></div>}<form onSubmit={submit} className="auth-form">{mode==='register'&&<label>Full name<input name="name" value={form.name} onChange={change} required placeholder="Your name"/></label>}<label>Email address<input name="email" type="email" value={form.email} onChange={change} required placeholder="you@example.com"/></label><label>Password<input name="password" type="password" minLength="8" value={form.password} onChange={change} required placeholder="At least 8 characters"/></label>{mode==='register'&&role==='owner'&&<><label>Pharmacy name<input name="pharmacyName" value={form.pharmacyName} onChange={change} required placeholder="Your pharmacy name"/></label><label>Pharmacy address<input name="address" value={form.address} onChange={change} required placeholder="Area, city"/></label><label>Contact phone<input name="phone" value={form.phone} onChange={change} placeholder="Phone number"/></label></>}<button disabled={busy} className="btn btn-primary btn-wide">{busy?'Please wait…':mode==='login'?'Sign in':'Create account'} <ArrowRight size={17}/></button></form><div className="auth-switch">{mode==='login'?<>New to PharmaFind? <Link to="/register">Create an account</Link></>:<>Already registered? <Link to="/login">Sign in</Link></>}</div><p className="fine center">By continuing, you agree to use the platform responsibly. Pharmacy owners are responsible for accurate listings and lawful dispensing.</p></div></div>}
+
+function Cart({cart,updateQty,removeCart,user,setCart,notify}) {
+  const nav = useNavigate();
+  const [phone,setPhone] = useState('');
+  const [busy,setBusy] = useState(false);
+
+  const total = cart.reduce((s,x) => s + x.price*x.quantity, 0);
+
+  const checkout = async () => {
+    if (!user) {
+      notify('Please sign in to place an order');
+      nav('/login');
+      return;
+    }
+
+    if (!/^[6-9]\d{9}$/.test(phone)) {
+      notify('Enter a valid 10-digit mobile number');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const {data} = await api.post('/orders', {
+        items: cart,
+        customerName: user.name,
+        phone,
+        fulfillmentType: 'pickup'
+      });
+
+      setCart([]);
+      notify(`Pickup order placed: ${data.orders.map(o=>o.id).join(', ')}`);
+      nav('/orders');
+    } catch(e) {
+      notify(e.response?.data?.message || 'Could not place order');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="page wrap">
+      <div className="page-heading">
+        <div className="eyebrow">YOUR SELECTION</div>
+        <h1>Shopping cart</h1>
+        <p>Review your items before placing a pickup order.</p>
+      </div>
+
+      {!cart.length ? (
+        <Empty
+          text="Your cart is empty. Explore medicines to add products."
+          action={<Link to="/medicines" className="btn btn-primary">Browse medicines</Link>}
+        />
+      ) : (
+        <div className="cart-layout">
+          <div className="cart-list">
+            {cart.map(x => (
+              <div className="cart-row" key={x.inventoryId}>
+                <div className="pill-mini"><Pill/></div>
+                <div className="cart-product">
+                  <b>{x.name}</b>
+                  <small>{x.pharmacy}</small>
+                  <span>{money(x.price)} each</span>
+                </div>
+                <div className="qty">
+                  <button onClick={()=>updateQty(x.inventoryId,-1)}><Minus size={14}/></button>
+                  <b>{x.quantity}</b>
+                  <button onClick={()=>updateQty(x.inventoryId,1)}><Plus size={14}/></button>
+                </div>
+                <b>{money(x.price*x.quantity)}</b>
+                <button className="remove" onClick={()=>removeCart(x.inventoryId)}><Trash2 size={17}/></button>
+              </div>
+            ))}
+          </div>
+
+          <aside className="checkout-card">
+            <h3>Pickup order summary</h3>
+            <div className="summary-line">
+              <span>Subtotal</span><b>{money(total)}</b>
+            </div>
+            <div className="summary-line">
+              <span>Delivery charge</span><b>₹0.00</b>
+            </div>
+            <div className="summary-total">
+              <span>Total</span><b>{money(total)}</b>
+            </div>
+
+            <div className="notice">
+              <Store size={18}/>
+              <span>Pickup only. Collect your medicines from the pharmacy shown beside each item. No home delivery is available.</span>
+            </div>
+
+            <label>
+              Contact phone
+              <input
+                value={phone}
+                onChange={e=>setPhone(e.target.value)}
+                placeholder="10-digit phone number"
+                maxLength={10}
+              />
+            </label>
+
+            <button
+              disabled={busy || !phone}
+              className="btn btn-primary btn-wide"
+              onClick={checkout}
+            >
+              {busy?'Placing order…':'Place pickup order'} <ArrowRight size={16}/>
+            </button>
+
+            <p className="fine">
+              Demo checkout only. No online payment is collected. Pay at the pharmacy when collecting your order.
+            </p>
+          </aside>
+        </div>
+      )}
+    </div>
+  );
+}
+function CustomerDashboard({user}){const [orders,setOrders]=useState([]);useEffect(()=>{if(user)api.get('/orders').then(r=>setOrders(r.data.items)).catch(()=>{})},[user]);if(!user)return <NeedLogin/>;return <div className="page wrap"><div className="page-heading"><div className="eyebrow">CUSTOMER SPACE</div><h1>Welcome, {user.name}</h1><p>Your recent orders and healthcare discovery in one place.</p></div><div className="dashboard-actions"><Link to="/medicines" className="dash-tile"><Search/><b>Find medicines</b><span>Search local stock</span></Link><Link to="/pharmacies" className="dash-tile"><Store/><b>Explore pharmacies</b><span>View local stores</span></Link><Link to="/orders" className="dash-tile"><ClipboardList/><b>My orders</b><span>{orders.length} total orders</span></Link></div><h2>Recent orders</h2><OrderList orders={orders.slice(0,5)}/></div>}
+function OwnerDashboard({user,notify}){const [data,setData]=useState(null);const [form,setForm]=useState({name:'',genericName:'',category:'Pain Relief',form:'Tablet',price:'',stock:'',brand:'Generic',description:'',prescription:false,expiryDate:''});const [catalog,setCatalog]=useState([]);const [busy,setBusy]=useState(false);useEffect(()=>{api.get('/medicine-catalog').then(r=>setCatalog(r.data.items||[])).catch(()=>{})},[]);const load=()=>api.get('/owner/overview').then(r=>setData(r.data)).catch(e=>notify(e.response?.data?.message||'Unable to load owner portal'));useEffect(()=>{if(user?.role==='owner')load()},[user]);if(!user)return <NeedLogin/>;if(user.role!=='owner')return <div className="page wrap"><Empty text="This portal is for pharmacy owner accounts."/></div>;const add=async e=>{e.preventDefault();setBusy(true);try{await api.post('/owner/inventory',form);setForm({...form,name:'',genericName:'',price:'',stock:'',description:'',expiryDate:''});notify('Medicine added to your inventory');load()}catch(e){notify(e.response?.data?.message||'Could not add medicine')}finally{setBusy(false)}};const update=async(id,field,value)=>{try{await api.put(`/owner/inventory/${id}`,{[field]:value});load()}catch(e){notify(e.response?.data?.message||'Update failed')}};const del=async id=>{if(!confirm('Remove this medicine from inventory?'))return;try{await api.delete(`/owner/inventory/${id}`);notify('Medicine removed');load()}catch(e){notify('Could not remove medicine')}};const status=async(id,value)=>{try{await api.patch(`/orders/${id}/status`,{status:value});notify('Order status updated');load()}catch(e){notify('Could not update order')}};if(!data)return <div className="page wrap">Loading owner portal…</div>;return <div className="page wrap"><div className="page-heading"><div className="eyebrow">PHARMACY MANAGEMENT</div><h1>{data.pharmacy.name}</h1><p>{data.pharmacy.address} · Owner dashboard</p></div><div className="stats-grid"><Stat icon={<Package/>} label="Listed products" value={data.stats.products}/><Stat icon={<AlertCircle/>} label="Low stock items" value={data.stats.lowStock}/><Stat icon={<Clock3/>} label="Pending orders" value={data.stats.pendingOrders}/><Stat icon={<ClipboardList/>} label="Total orders" value={data.stats.totalOrders}/></div><div className="owner-columns"><section className="panel"><div className="panel-title"><h2>Add medicine</h2><span className="eyebrow">INVENTORY</span></div><form className="inventory-form" onSubmit={add}><label>Choose medicine from catalogue<select required value={form.name} onChange={e=>{const m=catalog.find(x=>x.name===e.target.value);setForm({...form,name:m?.name||'',genericName:m?.genericName||'',category:m?.category||'Other',form:m?.form||'Tablet',price:m?.suggestedPrice??'',brand:m?.brand||'Generic',prescription:!!m?.prescription})}}><option value="">Select a medicine…</option>{catalog.map(m=><option key={m.id} value={m.name}>{m.name} — {m.category}{m.prescription?' (Rx)':''}</option>)}</select><small>Select a medicine; its generic name, category, form and suggested price will fill automatically.</small></label><label>Generic name<input value={form.genericName} readOnly placeholder="Auto-filled from catalogue"/></label><div className="two-fields"><label>Category<select value={form.category} onChange={e=>setForm({...form,category:e.target.value})}>{['Pain Relief','Antibiotics','Allergy','Digestive Health','Vitamins','First Aid','Cold & Cough','Personal Care','Devices','Diabetes Care','Cardiac Care','Other'].map(x=><option>{x}</option>)}</select></label><label>Form<select value={form.form} onChange={e=>setForm({...form,form:e.target.value})}>{['Tablet','Capsule','Syrup','Drops','Cream','Injection','Powder','Device','Medical Supply','Other'].map(x=><option>{x}</option>)}</select></label></div><div className="two-fields"><label>Price (₹)<input type="number" min="0" step="0.01" required value={form.price} onChange={e=>setForm({...form,price:e.target.value})}/></label><label>Stock quantity<input type="number" min="0" required value={form.stock} onChange={e=>setForm({...form,stock:e.target.value})}/></label></div><label>Brand<input value={form.brand} onChange={e=>setForm({...form,brand:e.target.value})}/></label><label>Expiry date (optional)<input type="date" value={form.expiryDate} onChange={e=>setForm({...form,expiryDate:e.target.value})}/></label><label>Description<textarea value={form.description} onChange={e=>setForm({...form,description:e.target.value})}/></label><label className="check-label"><input type="checkbox" checked={form.prescription} onChange={e=>setForm({...form,prescription:e.target.checked})}/> Prescription required (Rx)</label><button className="btn btn-primary btn-wide" disabled={busy}>{busy?'Adding…':'Add to inventory'} <Plus size={16}/></button></form></section><section className="panel inventory-panel"><div className="panel-title"><h2>Your inventory</h2><span className="eyebrow">{data.inventory.length} ITEMS</span></div>{data.inventory.map(x=><div className="inventory-row" key={x.id}><div className="inventory-item"><b>{x.name}</b><small>{x.category} · {money(x.price)}{x.expiryDate?` · Exp: ${x.expiryDate}`:''}</small></div><label className="stock-edit">Stock<input type="number" min="0" value={x.stock} onChange={e=>update(x.id,'stock',e.target.value)}/></label><button className="remove" onClick={()=>del(x.id)}><Trash2 size={16}/></button></div>)}</section></div><section className="panel orders-panel"><div className="panel-title"><h2>Incoming orders</h2><span className="eyebrow">CUSTOMER REQUESTS</span></div><OrderList orders={data.orders} owner onStatus={status}/></section></div>}
+function Orders({user}){const [orders,setOrders]=useState([]);useEffect(()=>{if(user)api.get('/orders').then(r=>setOrders(r.data.items)).catch(()=>{})},[user]);if(!user)return <NeedLogin/>;return <div className="page wrap"><div className="page-heading"><div className="eyebrow">ORDER HISTORY</div><h1>My orders</h1><p>Follow the progress of orders placed through PharmaFind.</p></div><OrderList orders={orders}/></div>}
+
+function OrderList({orders,owner=false,onStatus}){
+  if(!orders?.length) return <Empty text="No orders yet. When an order is placed, it will appear here."/>;
+  return (
+    <div className="orders-list">
+      {orders.map(o=>(
+        <article className="order-card" key={o.id}>
+          <div className="order-head">
+            <div>
+              <span className="order-id">{o.id}</span>
+              <small>{new Date(o.createdAt || o.created_at).toLocaleString()}</small>
+            </div>
+            <span className={`status status-${(o.status || 'Pending').toLowerCase().replaceAll(' ','-')}`}>
+              {o.status || 'Pending'}
+            </span>
+          </div>
+          <div className="order-body">
+            <div>
+              {(Array.isArray(o.items) ? o.items : []).map((i,index)=>(
+                <p key={i.inventoryId || i.inventory_id || index}>
+                  {i.name || i.medicine_name} × {i.quantity}
+                </p>
+              ))}
+              {owner && (
+                <small>
+                  {o.customerName || 'Customer'} · {o.phone || ''} · {o.address || ''}
+                </small>
+              )}
+            </div>
+            <b>{money(o.total ?? o.subtotal ?? 0)}</b>
+          </div>
+          {owner && (
+            <div className="order-controls">
+              <select
+                value={o.status}
+                onChange={e=>onStatus(o.id,e.target.value)}
+              >
+                {['Pending','Confirmed','Ready for pickup','Completed','Cancelled'].map(s=>(
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </article>
+      ))}
+    </div>
+  );
+}
+function Stat({icon,label,value}){return <div className="stat-card"><span>{icon}</span><div><b>{value}</b><small>{label}</small></div></div>}
+function Empty({text,action}){return <div className="empty"><div className="empty-icon"><Package/></div><p>{text}</p>{action}</div>}
+function NeedLogin(){return <div className="page wrap"><Empty text="Please sign in to access this page." action={<Link className="btn btn-primary" to="/login">Sign in</Link>}/></div>}
+
+
+
+function AdminDashboard({user,notify}){
+  const [data,setData]=useState(null);
+  const [users,setUsers]=useState({customers:[],owners:[]});
+  const [pharmacies,setPharmacies]=useState([]);
+  const [medicines,setMedicines]=useState([]);
+  const [orders,setOrders]=useState([]);
+  const [search,setSearch]=useState('');
+  const [tab,setTab]=useState('overview');
+  const [busy,setBusy]=useState(false);
+  const [medicineForm,setMedicineForm]=useState({
+    name:'',generic_name:'',brand:'',dosage_form:'',
+    description:'',prescription_required:false
+  });
+
+  const loadDashboard=async()=>{
+    setBusy(true);
+    try{
+      const [overview,userData,pharmacyData,medicineData,orderData]=
+        await Promise.all([
+          api.get('/admin/overview'),
+          api.get('/admin/users'),
+          api.get('/admin/pharmacies'),
+          api.get('/admin/medicines'),
+          api.get('/admin/orders')
+        ]);
+
+      setData(overview.data);
+      setUsers(userData.data);
+      setPharmacies(pharmacyData.data.pharmacies||[]);
+      setMedicines(medicineData.data.medicines||[]);
+      setOrders(orderData.data.orders||[]);
+    }catch(err){
+      notify(err.response?.data?.message||'Could not load admin data');
+    }finally{
+      setBusy(false);
+    }
+  };
+
+  useEffect(()=>{
+    if(user?.role==='admin') loadDashboard();
+  },[user]);
+
+  const updateApproval=async pharmacy=>{
+    try{
+      await api.patch(
+        `/admin/pharmacies/${pharmacy.id}/verification`,
+        {verified:!pharmacy.verified}
+      );
+      notify(pharmacy.verified?'Approval revoked':'Pharmacy approved');
+      await loadDashboard();
+    }catch(err){
+      notify(err.response?.data?.message||'Could not update pharmacy');
+    }
+  };
+
+  const addMedicine=async e=>{
+    e.preventDefault();
+    try{
+      await api.post('/admin/medicines',medicineForm);
+      setMedicineForm({
+        name:'',generic_name:'',brand:'',dosage_form:'',
+        description:'',prescription_required:false
+      });
+      notify('Medicine added successfully');
+      await loadDashboard();
+    }catch(err){
+      notify(err.response?.data?.message||'Could not add medicine');
+    }
+  };
+
+  const deleteMedicine=async medicine=>{
+    if(!window.confirm(`Delete ${medicine.name}?`)) return;
+    try{
+      await api.delete(`/admin/medicines/${medicine.id}`);
+      notify('Medicine deleted');
+      await loadDashboard();
+    }catch(err){
+      notify(err.response?.data?.message||'Could not delete medicine');
+    }
+  };
+
+  const filteredUsers=[
+    ...users.customers,
+    ...users.owners
+  ].filter(u=>
+    `${u.full_name} ${u.email} ${u.role}`
+      .toLowerCase().includes(search.toLowerCase())
+  );
+
+  const filteredPharmacies=pharmacies.filter(p=>
+    `${p.name} ${p.city}`.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const filteredMedicines=medicines.filter(m=>
+    `${m.name} ${m.generic_name||''} ${m.brand||''}`
+      .toLowerCase().includes(search.toLowerCase())
+  );
+
+  const filteredOrders=orders.filter(o=>
+    `${o.status} ${o.customer?.full_name||''} ${o.pharmacy?.name||''}`
+      .toLowerCase().includes(search.toLowerCase())
+  );
+
+  const tabs=[
+    ['overview','Overview'],
+    ['users','Customers & Owners'],
+    ['pharmacies','Pharmacies'],
+    ['medicines','Medicines'],
+    ['orders','Orders']
+  ];
+
+  const sectionStyle={
+    marginTop:24,
+    padding:20,
+    border:'1px solid #e1e9e7',
+    borderRadius:14,
+    background:'#fff'
+  };
+
+  const buttonStyle={
+    border:0,
+    borderRadius:8,
+    padding:'10px 15px',
+    cursor:'pointer',
+    fontWeight:600,
+    background:'#07856e',
+    color:'#fff'
+  };
+
+  return (
+    <div className="page wrap">
+      <div className="eyebrow">PLATFORM CONTROL</div>
+      <h1>Admin Dashboard</h1>
+      <p>Manage your PharmaFind platform from one place.</p>
+
+      <div style={{display:'flex',gap:8,flexWrap:'wrap',margin:'24px 0'}}>
+        {tabs.map(([key,label])=>(
+          <button key={key} onClick={()=>{
+            setTab(key);
+            setSearch('');
+          }} style={{
+            ...buttonStyle,
+            background:tab===key?'#07856e':'#eaf4f1',
+            color:tab===key?'white':'#126b5b'
+          }}>
+            {label}
+          </button>
+        ))}
+        <button onClick={loadDashboard} style={buttonStyle}>
+          Refresh
+        </button>
+      </div>
+
+      {busy&&<p>Loading latest data...</p>}
+
+      {tab==='overview'&&data&&(
+        <div className="stats-grid">
+          <Stat icon="👥" label="Customers" value={data.customers}/>
+          <Stat icon="🏪" label="Pharmacy Owners" value={data.owners}/>
+          <Stat icon="💊" label="Medicines" value={data.medicines}/>
+          <Stat icon="📦" label="Orders" value={data.orders}/>
+        </div>
+      )}
+
+      {tab==='users'&&(
+        <section style={sectionStyle}>
+          <h2>Customer & Owner Management</h2>
+          <input
+            placeholder="Search by name, email or role..."
+            value={search}
+            onChange={e=>setSearch(e.target.value)}
+            style={{width:'100%',padding:12,marginBottom:18}}
+          />
+          <p>Customers: {users.customers.length} | Owners: {users.owners.length}</p>
+
+          {filteredUsers.map(u=>(
+            <div key={u.id} style={{
+              padding:15,borderBottom:'1px solid #e5e5e5'
+            }}>
+              <strong>{u.full_name}</strong>
+              <p>{u.email}</p>
+              <p>Phone: {u.phone||'Not provided'}</p>
+              <span>{u.role==='owner'?'Pharmacy Owner':'Customer'}</span>
+              <p>Joined: {new Date(u.created_at).toLocaleDateString()}</p>
+            </div>
+          ))}
+          {filteredUsers.length===0&&<p>No users found.</p>}
+        </section>
+      )}
+
+      {tab==='pharmacies'&&(
+        <section style={sectionStyle}>
+          <h2>Pharmacy Management</h2>
+          <input
+            placeholder="Search pharmacy or city..."
+            value={search}
+            onChange={e=>setSearch(e.target.value)}
+            style={{width:'100%',padding:12,marginBottom:18}}
+          />
+          <p>{pharmacies.length} registered pharmacies</p>
+
+          {filteredPharmacies.map(p=>(
+            <div key={p.id} style={{
+              padding:16,borderBottom:'1px solid #e5e5e5'
+            }}>
+              <h3>{p.name}</h3>
+              <p>{p.address}, {p.city}</p>
+              <p>Phone: {p.phone||'Not provided'}</p>
+              <strong style={{color:p.verified?'#07856e':'#c47a18'}}>
+                {p.verified?'Approved':'Pending'}
+              </strong>
+              <p>
+                <button style={buttonStyle}
+                  onClick={()=>updateApproval(p)}>
+                  {p.verified?'Revoke Approval':'Approve Pharmacy'}
+                </button>
+              </p>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {tab==='medicines'&&(
+        <section style={sectionStyle}>
+          <h2>Medicine Catalogue</h2>
+
+          <form onSubmit={addMedicine}
+            style={{display:'grid',gap:12,marginBottom:25}}>
+            <h3>Add New Medicine</h3>
+            <input required placeholder="Medicine name"
+              value={medicineForm.name}
+              onChange={e=>setMedicineForm({...medicineForm,name:e.target.value})}/>
+            <input placeholder="Generic name"
+              value={medicineForm.generic_name}
+              onChange={e=>setMedicineForm({...medicineForm,generic_name:e.target.value})}/>
+            <input placeholder="Brand"
+              value={medicineForm.brand}
+              onChange={e=>setMedicineForm({...medicineForm,brand:e.target.value})}/>
+            <input placeholder="Dosage form (Tablet, Syrup, etc.)"
+              value={medicineForm.dosage_form}
+              onChange={e=>setMedicineForm({...medicineForm,dosage_form:e.target.value})}/>
+            <textarea placeholder="Description"
+              value={medicineForm.description}
+              onChange={e=>setMedicineForm({...medicineForm,description:e.target.value})}/>
+            <label>
+              <input type="checkbox"
+                checked={medicineForm.prescription_required}
+                onChange={e=>setMedicineForm({...medicineForm,prescription_required:e.target.checked})}/>
+              Prescription required
+            </label>
+            <button type="submit" style={buttonStyle}>Add Medicine</button>
+          </form>
+
+          <h3>Existing Medicines ({medicines.length})</h3>
+          <input placeholder="Search medicines..."
+            value={search}
+            onChange={e=>setSearch(e.target.value)}
+            style={{width:'100%',padding:12,marginBottom:18}}/>
+
+          {filteredMedicines.map(m=>(
+            <div key={m.id} style={{
+              padding:14,borderBottom:'1px solid #e5e5e5'
+            }}>
+              <strong>{m.name}</strong>
+              <p>{m.generic_name||'Generic name not listed'}</p>
+              <p>{m.brand||'Brand not listed'} | {m.dosage_form||'Form not listed'}</p>
+              <p>{m.prescription_required?'Prescription required':'No prescription flag'}</p>
+              <button style={{...buttonStyle,background:'#b63d3d'}}
+                onClick={()=>deleteMedicine(m)}>
+                Delete
+              </button>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {tab==='orders'&&(
+        <section style={sectionStyle}>
+          <h2>Order Monitoring</h2>
+          <input placeholder="Search orders, customer or pharmacy..."
+            value={search}
+            onChange={e=>setSearch(e.target.value)}
+            style={{width:'100%',padding:12,marginBottom:18}}/>
+          <p>Total orders: {orders.length}</p>
+
+          {filteredOrders.map(o=>(
+            <div key={o.id} style={{
+              padding:16,borderBottom:'1px solid #e5e5e5'
+            }}>
+              <strong>Order #{o.id.slice(0,8)}</strong>
+              <p>Customer: {o.customer?.full_name||'Unknown'}</p>
+              <p>Pharmacy: {o.pharmacy?.name||'Unknown'}</p>
+              <p>Status: <strong>{o.status}</strong></p>
+              <p>Total: ₹{o.subtotal}</p>
+              <p>Date: {new Date(o.created_at).toLocaleString()}</p>
+              <p>Items: {o.items?.length||0}</p>
+            </div>
+          ))}
+          {filteredOrders.length===0&&<p>No orders found.</p>}
+        </section>
+      )}
+    </div>
+  );
+}
+
+
+export default App;
