@@ -22,3 +22,8 @@ backend/data/db.json
 !.env.example
 frontend/.env
 backend/.env
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
