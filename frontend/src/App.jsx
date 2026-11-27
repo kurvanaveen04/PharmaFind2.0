@@ -53,6 +53,7 @@ const addToCart = item => {
   <Route path="/" element={<Home addToCart={addToCart} user={user}/>}/><Route path="/medicines" element={<Medicines addToCart={addToCart}/>}/><Route path="/pharmacies" element={<Pharmacies/>}/><Route path="/pharmacies/:id" element={<PharmacyDetail addToCart={addToCart}/>}/>
 
 <Route path="/login" element={<Auth mode="login" setUser={setUser} notify={notify}/>} />
+<Route path="/register" element={<Auth mode="register" setUser={setUser} notify={notify}/>} />
  <Route path="/cart" element={<Cart cart={cart} updateQty={updateQty} removeCart={removeCart} user={user} setCart={setCart} notify={notify}/>}/>
  <Route path="/owner" element={<OwnerDashboard user={user} notify={notify}/>}/>
 <Route path="/admin" element={<AdminDashboard user={user} notify={notify}/>}/>
