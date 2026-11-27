@@ -172,13 +172,19 @@ export default function PharmacyMap({ pharmacies = [] }) {
                 <br />
                 {p.verified ? 'Verified pharmacy' : 'Verification pending'}
                 <br />
-                <a
-                  href={`https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${userPosition ? `${userPosition[0]}%2C${userPosition[1]}` : `${DEFAULT_CENTER[0]}%2C${DEFAULT_CENTER[1]}`}%3B${p.latitude}%2C${p.longitude}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Get directions
-                </a>
+                {userPosition ? (
+  <a
+    href={`https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${userPosition[0]}%2C${userPosition[1]}%3B${p.latitude}%2C${p.longitude}`}
+    target="_blank"
+    rel="noreferrer"
+  >
+    Get directions
+  </a>
+) : (
+  <button type="button" onClick={locateMe}>
+    Share location to get directions
+  </button>
+)}
               </Popup>
             </Marker>
           ))}
